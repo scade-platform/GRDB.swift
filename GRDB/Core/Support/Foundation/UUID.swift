@@ -1,6 +1,6 @@
 import Foundation
 
-#if !os(Linux)
+#if !os(Linux) && !os(Android)
 /// NSUUID adopts DatabaseValueConvertible
 extension NSUUID: DatabaseValueConvertible {
     /// Returns a BLOB database value containing the uuid bytes.
