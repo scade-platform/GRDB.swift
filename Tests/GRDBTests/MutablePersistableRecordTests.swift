@@ -172,6 +172,8 @@ private struct PartialPlayer: Codable, MutablePersistableRecord, FetchableRecord
         case id, name
     }
     
+    typealias Columns = FullPlayer.Columns
+    
     mutating func willInsert(_ db: Database) throws {
         callbacks.willInsertCount += 1
     }
@@ -238,6 +240,12 @@ private struct FullPlayer: Codable, MutablePersistableRecord, FetchableRecord {
     
     enum CodingKeys: String, CodingKey {
         case id, name, score
+    }
+    
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+        static let score = Column(CodingKeys.score)
     }
     
     let callbacks = Callbacks()
@@ -1248,7 +1256,7 @@ class MutablePersistableRecordTests: GRDBTestCase {
 
 extension MutablePersistableRecordTests {
     func test_insertAndFetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1269,7 +1277,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_insertAndFetch_as() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1319,7 +1327,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_insertAndFetch_selection_fetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1404,13 +1412,104 @@ extension MutablePersistableRecordTests {
             }
         }
     }
+    
+    func test_insertAndFetch_fetch_select() throws {
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
+        guard Database.sqliteLibVersionNumber >= 3035000 else {
+            throw XCTSkip("RETURNING clause is not available")
+        }
+#else
+        guard #available(iOS 15, macOS 12, tvOS 15, watchOS 8, *) else {
+            throw XCTSkip("RETURNING clause is not available")
+        }
+#endif
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            do {
+                clearSQLQueries()
+                var partialPlayer = PartialPlayer(name: "Arthur")
+                let score = try partialPlayer.insertAndFetch(db) { (statement: Statement) in
+                    try Int.fetchOne(statement)!
+                } select: {
+                    [$0.score]
+                }
+                
+                XCTAssert(sqlQueries.contains("""
+                    INSERT INTO "player" ("id", "name") VALUES (NULL,'Arthur') RETURNING "score"
+                    """), sqlQueries.joined(separator: "\n"))
+                
+                XCTAssertEqual(partialPlayer.id, 1)
+                XCTAssertEqual(score, 1000)
+                
+                XCTAssertEqual(partialPlayer.callbacks.willInsertCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.aroundInsertEnterCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.aroundInsertExitCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.didInsertCount, 1)
+                
+                XCTAssertEqual(partialPlayer.callbacks.willUpdateCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.aroundUpdateEnterCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.aroundUpdateExitCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.didUpdateCount, 0)
+                
+                XCTAssertEqual(partialPlayer.callbacks.willSaveCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.aroundSaveEnterCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.aroundSaveExitCount, 1)
+                XCTAssertEqual(partialPlayer.callbacks.didSaveCount, 1)
+                
+                XCTAssertEqual(partialPlayer.callbacks.willDeleteCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.aroundDeleteEnterCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.aroundDeleteExitCount, 0)
+                XCTAssertEqual(partialPlayer.callbacks.didDeleteCount, 0)
+            }
+
+            do {
+                // Test onConflict: .ignore
+                clearSQLQueries()
+                var player = FullPlayer(id: 1, name: "Barbara", score: 100)
+                try XCTAssertTrue(player.exists(db))
+                let score = try player.insertAndFetch(db, onConflict: .ignore) { (statement: Statement) in
+                    try Int.fetchOne(statement)
+                } select: {
+                    [$0.score]
+                }
+                
+                XCTAssert(sqlQueries.contains("""
+                    INSERT OR IGNORE INTO "player" ("id", "name", "score") VALUES (1,'Barbara',100) RETURNING "score"
+                    """), sqlQueries.joined(separator: "\n"))
+                
+                XCTAssertEqual(player.id, 1)
+                XCTAssertNil(score)
+                
+                XCTAssertEqual(player.callbacks.willInsertCount, 1)
+                XCTAssertEqual(player.callbacks.aroundInsertEnterCount, 1)
+                XCTAssertEqual(player.callbacks.aroundInsertExitCount, 1)
+                XCTAssertEqual(player.callbacks.didInsertCount, 1)
+                
+                XCTAssertEqual(player.callbacks.willUpdateCount, 0)
+                XCTAssertEqual(player.callbacks.aroundUpdateEnterCount, 0)
+                XCTAssertEqual(player.callbacks.aroundUpdateExitCount, 0)
+                XCTAssertEqual(player.callbacks.didUpdateCount, 0)
+                
+                XCTAssertEqual(player.callbacks.willSaveCount, 1)
+                XCTAssertEqual(player.callbacks.aroundSaveEnterCount, 1)
+                XCTAssertEqual(player.callbacks.aroundSaveExitCount, 1)
+                XCTAssertEqual(player.callbacks.didSaveCount, 1)
+                
+                XCTAssertEqual(player.callbacks.willDeleteCount, 0)
+                XCTAssertEqual(player.callbacks.aroundDeleteEnterCount, 0)
+                XCTAssertEqual(player.callbacks.aroundDeleteExitCount, 0)
+                XCTAssertEqual(player.callbacks.didDeleteCount, 0)
+            }
+        }
+    }
 }
 
 // MARK: - Save and Fetch
 
 extension MutablePersistableRecordTests {
     func test_saveAndFetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1431,7 +1530,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_saveAndFetch_as() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1557,7 +1656,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_saveAndFetch_selection_fetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1687,7 +1786,7 @@ extension MutablePersistableRecordTests {
 
 extension MutablePersistableRecordTests {
     func test_updateAndFetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1738,7 +1837,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateAndFetch_as() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1788,7 +1887,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateAndFetch_selection_fetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1842,7 +1941,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateAndFetch_columns_selection_fetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1896,7 +1995,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateChangesAndFetch_modify() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -1957,7 +2056,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateChangesAndFetch_as_modify() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -2017,7 +2116,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_updateChangesAndFetch_selection_fetch_modify() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("RETURNING clause is not available")
         }
@@ -2087,7 +2186,7 @@ extension MutablePersistableRecordTests {
 
 extension MutablePersistableRecordTests {
     func test_upsert() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("UPSERT is not available")
         }
@@ -2236,7 +2335,7 @@ extension MutablePersistableRecordTests {
     }
 
     func test_upsertAndFetch_do_update_set_where() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("UPSERT is not available")
         }
@@ -2392,7 +2491,7 @@ extension MutablePersistableRecordTests {
     }
     
     func test_upsertAndFetch() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("UPSERT is not available")
         }
@@ -2495,7 +2594,7 @@ extension MutablePersistableRecordTests {
     }
 
     func test_upsertAndFetch_as() throws {
-#if GRDBCUSTOMSQLITE || GRDBCIPHER
+#if GRDBCUSTOMSQLITE || SQLITE_HAS_CODEC
         guard Database.sqliteLibVersionNumber >= 3035000 else {
             throw XCTSkip("UPSERT is not available")
         }
@@ -2697,3 +2796,47 @@ extension MutablePersistableRecordTests {
         } catch DatabaseError.SQLITE_MISUSE { }
     }
 }
+
+#if SQLITE_ENABLE_FTS5
+class Issue1820Tests: GRDBTestCase {
+    // Regression test for https://github.com/groue/GRDB.swift/issues/1820
+    func testIssue1820() throws {
+        struct Serving: Codable, FetchableRecord, PersistableRecord {
+            let id: UUID
+            var description: String
+            var foodId: String
+            
+            static let author = hasOne(Food.self)
+        }
+        
+        struct Food: Codable, FetchableRecord, PersistableRecord {
+            let id: UUID
+            var name: String
+            var foodId: String
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "food") { t in
+                t.column("id", .blob).primaryKey()
+                t.column("name", .text)
+                t.column("foodId", .text).unique()
+            }
+            
+            try db.create(table: "serving") { t in
+                t.column("id", .blob).primaryKey()
+                t.column("description", .text)
+                t.column("foodId", .text).references("food", column: "foodId")
+            }
+            
+            try db.create(virtualTable: "food_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "food")
+                t.column("name")
+            }
+            
+            try Food(id: UUID(), name: "Apple", foodId: "apple").save(db)
+            try Serving(id: UUID(), description: "Apple", foodId: "apple").save(db)
+        }
+    }
+}
+#endif

@@ -1,10 +1,13 @@
 // Import C SQLite functions
-#if SWIFT_PACKAGE
-import GRDBSQLite
-#elseif GRDBCIPHER
+#if GRDBCIPHER // CocoaPods (SQLCipher subspec)
 import SQLCipher
-#elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
+#elseif GRDBFRAMEWORK // GRDB.xcodeproj or CocoaPods (standard subspec)
 import SQLite3
+#elseif GRDBCUSTOMSQLITE // GRDBCustom Framework
+// #elseif SomeTrait
+// import ...
+#else // Default SPM trait must be the default. It impossible to detect from Xcode.
+import GRDBSQLite
 #endif
 
 /// A type that can decode itself from the low-level C interface to
@@ -563,13 +566,20 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .select(Column("score"))
-    ///         .filter(Column("lastName") == lastName)
+    ///         .select(\.score)
+    ///         .filter { $0.lastName == lastName }
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -608,13 +618,20 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .select(Column("score"))
-    ///         .filter(Column("lastName") == lastName)
+    ///         .select(\.score)
+    ///         .filter { $0.lastName == lastName }
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -647,13 +664,20 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .select(Column("score"))
-    ///         .filter(Column("lastName") == lastName)
+    ///         .select(\.score)
+    ///         .filter { $0.lastName == lastName }
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -681,13 +705,20 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible & Hash
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .select(Column("score"))
-    ///         .filter(Column("lastName") == lastName)
+    ///         .select(\.score)
+    ///         .filter { $0.lastName == lastName }
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -720,13 +751,20 @@ extension FetchRequest where RowDecoder: DatabaseValueConvertible & StatementCol
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .filter(Column("lastName") == lastName)
-    ///         .select(Column("score"), as: Int.self)
+    ///         .filter { $0.lastName == lastName }
+    ///         .select(\.score, as: Int.self)
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -760,13 +798,20 @@ extension FetchRequest where RowDecoder: DatabaseValueConvertible & StatementCol
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .filter(Column("lastName") == lastName)
-    ///         .select(Column("score"), as: Int.self)
+    ///         .filter { $0.lastName == lastName }
+    ///         .select(\.score, as: Int.self)
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -796,13 +841,20 @@ extension FetchRequest where RowDecoder: DatabaseValueConvertible & StatementCol
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .filter(Column("lastName") == lastName)
-    ///         .select(Column("score"), as: Int.self)
+    ///         .filter { $0.lastName == lastName }
+    ///         .select(\.score, as: Int.self)
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """
@@ -827,13 +879,20 @@ extension FetchRequest where RowDecoder: DatabaseValueConvertible & StatementCol
     /// For example:
     ///
     /// ```swift
+    /// struct Player: TableRecord {
+    ///     enum Columns {
+    ///         static let score = Column("score")
+    ///         static let lastName = Column("lastName")
+    ///     }
+    /// }
+    ///
     /// try dbQueue.read { db in
     ///     let lastName = "O'Reilly"
     ///
     ///     // Query interface request
     ///     let request = Player
-    ///         .filter(Column("lastName") == lastName)
-    ///         .select(Column("score"), as: Int.self)
+    ///         .filter { $0.lastName == lastName }
+    ///         .select(\.score, as: Int.self)
     ///
     ///     // SQL request
     ///     let request: SQLRequest<Int> = """

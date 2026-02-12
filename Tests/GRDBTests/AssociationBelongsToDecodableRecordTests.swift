@@ -5,6 +5,11 @@ private struct Team: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "teams"
     var id: Int64
     var name: String
+    
+    enum Columns {
+        static let id = Column(CodingKeys.id)
+        static let name = Column(CodingKeys.name)
+    }
 }
 
 private struct Player: Codable, FetchableRecord, PersistableRecord {
@@ -13,6 +18,10 @@ private struct Player: Codable, FetchableRecord, PersistableRecord {
     var id: Int64
     var teamId: Int64?
     var name: String
+    
+    enum Columns {
+        static let name = Column(CodingKeys.name)
+    }
 }
 
 private struct PlayerWithRequiredTeam: Decodable, FetchableRecord {
@@ -34,13 +43,21 @@ private struct PlayerWithTeamName: Decodable, FetchableRecord {
 
 private extension QueryInterfaceRequest<Player> {
     func filter(teamName: String) -> QueryInterfaceRequest<Player> {
-        joining(required: PlayerWithOptionalTeam.team.filter(Column("name") == teamName))
+        joining(required: PlayerWithOptionalTeam.team.filter { $0.name == teamName })
     }
     
     func orderedByTeamName() -> QueryInterfaceRequest<Player> {
         let teamAlias = TableAlias()
-        return joining(optional: PlayerWithOptionalTeam.team.aliased(teamAlias))
-            .order(teamAlias[Column("name")], Column("name"))
+        return self
+            .joining(optional: PlayerWithOptionalTeam.team.aliased(teamAlias))
+            .order { [teamAlias[Team.Columns.name], $0.name] }
+    }
+    
+    func orderedByTeamName_swift61() -> QueryInterfaceRequest<Player> {
+        let teamAlias = TableAlias<Team>()
+        return self
+            .joining(optional: PlayerWithOptionalTeam.team.aliased(teamAlias))
+            .order { [teamAlias.name, $0.name] }
     }
 }
 
@@ -82,7 +99,7 @@ class AssociationBelongsToDecodableRecordTests: GRDBTestCase {
     func testAnnotatedWithRequired() throws {
         let dbQueue = try makeDatabaseQueue()
         let request = Player
-            .annotated(withRequired: Player.team.select(Column("name").forKey("teamName")))
+            .annotated(withRequired: Player.team.select { $0.name.forKey("teamName") })
             .asRequest(of: PlayerWithTeamName.self)
         let records = try dbQueue.inDatabase { try request.fetchAll($0) }
         XCTAssertEqual(records.count, 1)
@@ -113,7 +130,7 @@ class AssociationBelongsToDecodableRecordTests: GRDBTestCase {
     func testAnnotatedWithOptional() throws {
         let dbQueue = try makeDatabaseQueue()
         let request = Player
-            .annotated(withOptional: Player.team.select(Column("name").forKey("teamName")))
+            .annotated(withOptional: Player.team.select { $0.name.forKey("teamName") })
             .asRequest(of: PlayerWithTeamName.self)
         let records = try dbQueue.inDatabase { try request.fetchAll($0) }
         XCTAssertEqual(records.count, 2)
@@ -152,9 +169,31 @@ class AssociationBelongsToDecodableRecordTests: GRDBTestCase {
     func testRequestRefining() throws {
         let dbQueue = try makeDatabaseQueue()
         let request = Player
-            .including(required: PlayerWithRequiredTeam.team.select(Column("name"), Column("id")))
+            .including(required: PlayerWithRequiredTeam.team.select { [$0.name, $0.id] })
             .filter(teamName: "Reds")
             .orderedByTeamName()
+            .asRequest(of: PlayerWithRequiredTeam.self)
+        let records = try dbQueue.inDatabase { try request.fetchAll($0) }
+        XCTAssertEqual(lastSQLQuery, """
+            SELECT "players".*, "teams"."name", "teams"."id" \
+            FROM "players" \
+            JOIN "teams" ON ("teams"."id" = "players"."teamId") AND ("teams"."name" = 'Reds') \
+            ORDER BY "teams"."name", "players"."name"
+            """)
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records[0].player.id, 1)
+        XCTAssertEqual(records[0].player.teamId, 1)
+        XCTAssertEqual(records[0].player.name, "Arthur")
+        XCTAssertEqual(records[0].team.id, 1)
+        XCTAssertEqual(records[0].team.name, "Reds")
+    }
+    
+    func testRequestRefining_swift61() throws {
+        let dbQueue = try makeDatabaseQueue()
+        let request = Player
+            .including(required: PlayerWithRequiredTeam.team.select { [$0.name, $0.id] })
+            .filter(teamName: "Reds")
+            .orderedByTeamName_swift61()
             .asRequest(of: PlayerWithRequiredTeam.self)
         let records = try dbQueue.inDatabase { try request.fetchAll($0) }
         XCTAssertEqual(lastSQLQuery, """
