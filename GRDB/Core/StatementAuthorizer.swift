@@ -12,7 +12,9 @@ import GRDBSQLite
 
 #if canImport(string_h)
 import string_h
-#elseif os(Linux) || os(Android)
+#elseif os(Android)
+import Android
+#elseif os(Linux)
 import Glibc
 #elseif os(macOS) || os(iOS) || os(watchOS) || os(tvOS) || os(visionOS)
 import Darwin

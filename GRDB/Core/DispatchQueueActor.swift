@@ -1,4 +1,4 @@
-import Dispatch
+@preconcurrency import Dispatch
 
 /// An actor that runs in a DispatchQueue.
 ///
@@ -44,6 +44,6 @@ private final class DispatchQueueExecutor: SerialExecutor {
     }
 }
 
-#if os(Linux)
+#if os(Linux) || os(Android)
     extension DispatchQueueExecutor: @unchecked Sendable {}
 #endif
